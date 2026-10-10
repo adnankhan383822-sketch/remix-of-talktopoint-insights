@@ -1,7 +1,9 @@
 import { useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { ChevronDown, FileText, MessageCircle, Trash2, UploadCloud, Wand2 } from "lucide-react";
+import { ChevronDown, FileText, Loader2, MessageCircle, Mic, Trash2, UploadCloud, Wand2 } from "lucide-react";
+import { transcribeAudio } from "@/lib/audio.functions";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +35,17 @@ export const Route = createFileRoute("/dashboard")({
   component: Dashboard,
 });
 
+const AUDIO_MIME: Record<string, string> = {
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  m4a: "audio/mp4",
+  ogg: "audio/ogg",
+  webm: "audio/webm",
+};
+
 function Dashboard() {
+  const transcribe = useServerFn(transcribeAudio);
+  const [audioBusy, setAudioBusy] = useState(false);
   const navigate = useNavigate();
   const list = useConversations();
   const [text, setText] = useState("");
@@ -64,9 +76,26 @@ function Dashboard() {
     navigate({ to: "/c/$id", params: { id: conv.id } });
   };
 
+  const onAudio = async (file: File) => {
+    if (file.size > 25 * 1024 * 1024) return toast.error("Audio file is too large (max 25 MB).");
+    setAudioBusy(true);
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+    const mime = file.type.startsWith("audio/") ? file.type : AUDIO_MIME[ext] ?? "audio/mpeg";
+    const fd = new FormData();
+    fd.append("file", new File([file], file.name, { type: mime }));
+    const res = await transcribe({ data: fd }).catch(() => ({ ok: false as const, error: "Network error — please retry." }));
+    setAudioBusy(false);
+    if (!res.ok) return toast.error("Couldn't process the recording", { description: res.error });
+    toast.success("Transcribed! Analyzing now…");
+    create(res.text, "upload", file.name.replace(/\.\w+$/, ""));
+  };
+
   const onFile = async (file: File) => {
-    if (!/\.txt$/i.test(file.name) && file.type !== "text/plain") {
-      toast.error("Only .txt files for now", { description: "PDF and DOCX support is coming next." });
+    if (audioBusy) return;
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+    if (file.type.startsWith("audio/") || ext in AUDIO_MIME) return onAudio(file);
+    if (ext !== "txt" && file.type !== "text/plain") {
+      toast.error("Unsupported file", { description: "Use .txt or an audio file (.mp3, .wav, .m4a). PDF/DOCX coming next." });
       return;
     }
     if (file.size > 2_000_000) return toast.error("File is too large (max 2 MB).");
@@ -121,16 +150,29 @@ function Dashboard() {
             )}
           >
             <div className="grid h-14 w-14 place-items-center rounded-2xl bg-gradient-primary text-primary-foreground shadow-glow">
-              <UploadCloud className="h-6 w-6" />
+              {audioBusy ? <Loader2 className="h-6 w-6 animate-spin" /> : <UploadCloud className="h-6 w-6" />}
             </div>
-            <div className="font-display text-lg font-semibold">Drag & drop a conversation</div>
-            <p className="text-sm text-muted-foreground">.txt chat exports, transcripts or tickets · or click to browse</p>
+            <div className="font-display text-lg font-semibold">
+              {audioBusy ? "Listening to your recording…" : "Drag & drop a conversation"}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {audioBusy ? (
+                "Transcribing and detecting speakers — this can take a minute for long audio."
+              ) : (
+                <>
+                  .txt chats & transcripts, or <span className="inline-flex items-center gap-1 font-medium text-foreground"><Mic className="h-3.5 w-3.5" />audio (.mp3, .wav, .m4a)</span> · click to browse
+                </>
+              )}
+            </p>
             <input
               ref={fileRef}
               type="file"
-              accept=".txt,text/plain"
+              accept=".txt,text/plain,audio/*,.mp3,.wav,.m4a,.ogg,.webm"
               className="hidden"
-              onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+              onChange={(e) => {
+                if (e.target.files?.[0]) onFile(e.target.files[0]);
+                e.target.value = "";
+              }}
             />
           </div>
 
