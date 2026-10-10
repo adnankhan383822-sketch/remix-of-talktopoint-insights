@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { ChevronDown, FileText, MessageCircle, Sparkles as _unused, Trash2, UploadCloud, Wand2 } from "lucide-react";
+import { ChevronDown, FileText, MessageCircle, Trash2, UploadCloud, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +18,6 @@ import { deleteConversation, saveConversation, useConversations } from "@/lib/st
 import type { Conversation, SourceType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-void _unused;
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
