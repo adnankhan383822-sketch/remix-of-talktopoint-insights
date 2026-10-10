@@ -223,3 +223,111 @@ export const summarizeFor = createServerFn({ method: "POST" })
       return fail(e);
     }
   });
+
+/* ---------------- Timeline + sentiment ---------------- */
+const TsIn = MsgIn.extend({ timestamp: z.string().nullable().optional() });
+
+const timelineJson = {
+  type: "object",
+  additionalProperties: false,
+  required: ["timeline", "sentiment"],
+  properties: {
+    timeline: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["topic", "startId", "endId", "sources"],
+        properties: {
+          topic: { type: "string" },
+          startId: { type: ["integer", "null"] },
+          endId: { type: ["integer", "null"] },
+          sources: ids,
+        },
+      },
+    },
+    sentiment: {
+      type: "object",
+      additionalProperties: false,
+      required: ["overall", "speakers"],
+      properties: {
+        overall: { type: "string" },
+        speakers: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["name", "score"],
+            properties: { name: { type: "string" }, score: { type: "number" } },
+          },
+        },
+      },
+    },
+  },
+};
+const TimelineZ = z.object({
+  timeline: z.array(
+    z.object({
+      topic: z.string(),
+      startId: z.number().nullable(),
+      endId: z.number().nullable(),
+      sources: z.array(z.number()),
+    }),
+  ),
+  sentiment: z.object({ overall: z.string(), speakers: z.array(z.object({ name: z.string(), score: z.number() })) }),
+});
+
+export const extractTimelineSentiment = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ messages: z.array(TsIn).min(1).max(2000) }).parse(d))
+  .handler(async ({ data }) => {
+    try {
+      const msgs = data.messages;
+      const r = await callLLM(
+        `Build a topic timeline and a sentiment read of this conversation.
+Timeline: 3-8 major topics in the order they were discussed, phrased in the conversation's language. startId/endId = the message id where the topic starts/ends (integer or null). sources = the message ids that define the topic.
+Sentiment: overall = one sentence describing the tone and how it evolved. speakers = one entry per distinct speaker with score from -1 (negative) to 1 (positive).
+${LANGUAGE_RULES}\n\nMESSAGES:\n${fmt(msgs)}`,
+        { name: "timeline_sentiment", json: timelineJson, zod: TimelineZ },
+      );
+      const ts = (id: number | null) => (id == null ? null : msgs.find((m) => m.id === id)?.timestamp ?? null);
+      return {
+        ok: true as const,
+        timeline: r.timeline.map((t) => ({ topic: t.topic, start: ts(t.startId), end: ts(t.endId), sources: t.sources })),
+        sentiment: r.sentiment,
+      };
+    } catch (e) {
+      return fail(e);
+    }
+  });
+
+/* ---------------- Ask AI (Q&A with citations) ---------------- */
+const AskIn = z.object({
+  messages: z.array(MsgIn).min(1).max(2000),
+  question: z.string().min(1).max(2000),
+  history: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().max(6000) })).max(10).optional(),
+});
+
+export const askConversation = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => AskIn.parse(d))
+  .handler(async ({ data }) => {
+    try {
+      const hist = (data.history ?? []).map((h) => `${h.role === "user" ? "Q" : "A"}: ${h.content}`).join("\n");
+      const r = await callLLM(
+        `You answer questions about the conversation below.
+Rules: Answer ONLY from the messages — never invent facts. Cite the supporting message ids inline like [3] or [3,8]. If the answer is not in the conversation, say so plainly. Keep answers short (2-5 sentences) unless a list is genuinely needed.
+${LANGUAGE_RULES}
+${hist ? `PREVIOUS Q&A IN THIS THREAD:\n${hist}\n\n` : ""}QUESTION: ${data.question}
+
+MESSAGES:
+${fmt(data.messages)}`,
+        {
+          name: "ask",
+          json: { type: "object", additionalProperties: false, required: ["answer"], properties: { answer: { type: "string" } } },
+          zod: z.object({ answer: z.string() }),
+        },
+      );
+      return { ok: true as const, answer: r.answer };
+    } catch (e) {
+      return fail(e);
+    }
+  });

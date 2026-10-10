@@ -40,12 +40,26 @@ export interface ActionItem {
 export type SummaryLevel = "tldr" | "standard" | "detailed";
 export type SummaryRole = "executive" | "developer" | "customer";
 
+export interface TimelineTopic {
+  topic: string;
+  start: string | null;
+  end: string | null;
+  sources: number[];
+}
+
+export interface SentimentData {
+  overall: string;
+  speakers: { name: string; score: number }[]; // -1 (negative) .. 1 (positive)
+}
+
 export interface Analysis {
   title: string;
   tags: string[];
   summaries: Partial<Record<`${SummaryLevel}:${SummaryRole}`, string>>;
   insights: Insight[];
   actions: ActionItem[];
+  timeline?: TimelineTopic[];
+  sentiment?: SentimentData;
 }
 
 export type SourceType = "paste" | "upload" | "sample";
