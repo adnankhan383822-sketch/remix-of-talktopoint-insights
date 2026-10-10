@@ -1,6 +1,6 @@
 # TalktoPoint — Setup & Architecture Guide
 
-Everything you need to run, understand, and extend this project: local setup, how the AI integration works, where data lives, and how the pieces fit together.
+Everything you need to run, understand, and deploy this project: local setup, how the AI integration works, where data lives, how to migrate to your own Supabase account, and how to deploy to Vercel.
 
 ---
 
@@ -24,27 +24,36 @@ The app starts on `http://localhost:5173` (Vite default).
 
 ### Useful scripts
 
-| Command           | What it does                        |
-| ----------------- | ----------------------------------- |
+| Command           | What it does                         |
+| ----------------- | ------------------------------------ |
 | `npm run dev`     | Start the dev server with hot reload |
-| `npm run build`   | Production build                    |
-| `npm run preview` | Serve the production build locally  |
-| `npm run test`    | Run the test suite (Vitest)         |
-| `npm run lint`    | Lint with ESLint                    |
+| `npm run build`   | Production build                     |
+| `npm run preview` | Serve the production build locally   |
+| `npm run test`    | Run the test suite (Vitest)          |
+| `npm run lint`    | Lint with ESLint                     |
 
 ### Environment variables
 
-| Variable          | Where it's read | Purpose                                             |
-| ----------------- | --------------- | --------------------------------------------------- |
-| `LOVABLE_API_KEY` | Server only     | Authenticates all AI calls through the AI gateway.  |
+| Variable          | Where it's read | Purpose                                                        |
+| ----------------- | --------------- | -------------------------------------------------------------- |
+| `GEMINI_API_KEY`  | Server only     | Text AI (summaries, key points, actions, Q&A) via Gemini API.  |
+| `GROQ_API_KEY`    | Server only     | Audio transcription via Groq's free `whisper-large-v3`.        |
+| `LOVABLE_API_KEY` | Server only     | Optional fallback for text AI when Gemini is busy/rate-limited. |
 
-When running inside Lovable, this key is injected automatically — you never see or handle it. For local development outside Lovable, create a `.env` file (never commit it):
+For local development outside Lovable, create a `.env` file (never commit it):
 
 ```sh
-LOVABLE_API_KEY=your_key_here
+GEMINI_API_KEY=your_gemini_key_here
+GROQ_API_KEY=your_groq_key_here
+LOVABLE_API_KEY=your_lovable_key_here   # optional fallback
 ```
 
-The key is read **inside server handlers only** (`process.env["LOVABLE_API_KEY"]`), never at module scope and never in browser code. There is no other secret in the project.
+All keys are read **inside server handlers only** (`process.env[...]`), never at module scope and never in browser code.
+
+**Where to get the free keys:**
+
+- **Gemini:** https://aistudio.google.com/apikey — free tier, no credit card.
+- **Groq:** https://console.groq.com — free tier, no credit card (20 audio requests/min, 2 hours of audio/day).
 
 ---
 
@@ -53,7 +62,8 @@ The key is read **inside server handlers only** (`process.env["LOVABLE_API_KEY"]
 - **Framework:** TanStack Start v1 (React 19, SSR, server functions) on Vite 7
 - **Styling:** Tailwind CSS v4 (theme tokens in `src/styles.css`) + shadcn/ui components
 - **Charts:** Recharts (sentiment / talk-time)
-- **AI:** Lovable AI Gateway — chat model `google/gemini-3.8-flash`, transcription model `openai/gpt-transcribe`
+- **Text AI:** Google Gemini `gemini-3.8-flash` (direct API, free key) with automatic fallback to the Lovable AI Gateway
+- **Audio AI:** Groq `whisper-large-v3` (free tier)
 - **Validation:** Zod (every AI response is schema-validated before use)
 - **Storage:** Browser localStorage (temporary — see "Database" below)
 
@@ -75,9 +85,9 @@ src/
 │   ├── citations.tsx       # Citation chips that scroll to source messages
 │   └── theme.tsx           # Dark/light toggle
 ├── lib/
-│   ├── llm.ts              # callLLM() — the single AI entry point
+│   ├── llm.ts              # callLLM() — the single AI entry point (Gemini → gateway fallback)
 │   ├── ai.functions.ts     # Server functions: analyze, summarize, timeline, ask
-│   ├── audio.functions.ts  # Server function: audio → transcript → speaker turns
+│   ├── audio.functions.ts  # Server function: audio → Groq transcript → speaker turns
 │   ├── audio-convert.ts    # Browser: any audio → 16 kHz mono WAV before upload
 │   ├── parser.ts           # Chat text parsing (WhatsApp, "Name:", timed) + privacy masking
 │   ├── store.ts            # localStorage persistence + sample merging
@@ -93,27 +103,26 @@ src/
 
 ### One function rules them all: `callLLM`
 
-Every model call in the app goes through `callLLM(prompt, schema)` in `src/lib/llm.ts`. Nothing else talks to an AI provider. This keeps the provider swappable — to change models or providers, you edit one file.
+Every text model call in the app goes through `callLLM(prompt, schema)` in `src/lib/llm.ts`. Nothing else talks to an AI provider. This keeps the provider swappable — to change models or providers, you edit one file.
 
 How it works:
 
-1. Reads `LOVABLE_API_KEY` from the server environment (inside the call, never at module scope).
-2. POSTs to the gateway chat endpoint with `stream: true` and a **strict JSON schema** (`response_format: json_schema, strict: true`).
-3. Consumes the SSE stream server-side and accumulates the content.
-4. Parses the JSON and **validates it against a Zod schema** before returning. If the model returns anything off-shape, the call fails cleanly with a readable error instead of corrupt data.
-5. Maps gateway errors to friendly messages: `429` → "AI is busy", `402` → "credits used up".
+1. If `GEMINI_API_KEY` is set, it calls the Gemini API directly (`gemini-3.8-flash`) with `responseMimeType: application/json` and a converted JSON schema (`toGeminiSchema` strips `additionalProperties` and flattens union types like `["string","null"]`, which Gemini rejects).
+2. If Gemini returns `429` or `5xx` (the free tier is often busy) and `LOVABLE_API_KEY` exists, it automatically falls back to the Lovable AI Gateway so analysis still succeeds.
+3. The response is parsed (markdown fences stripped) and **validated against a Zod schema** before returning. Off-shape output fails cleanly with a readable error instead of corrupt data.
+4. Errors map to friendly messages: `429` → "AI is busy", `402` → "credits used up".
 
 ### Server functions (where AI is used)
 
 All AI work lives in `createServerFn` handlers so keys never reach the browser:
 
-| Function                  | File                      | Purpose                                                                 |
-| ------------------------- | ------------------------- | ----------------------------------------------------------------------- |
-| `analyzeConversation`     | `ai.functions.ts`         | Full pipeline: chunk → extract per chunk (parallel) → merge → verify.   |
-| `summarizeFor`            | `ai.functions.ts`         | On-demand summary for a level (TL;DR/Standard/Detailed) × role.         |
-| `extractTimelineSentiment`| `ai.functions.ts`         | Topic timeline + per-speaker sentiment scores.                          |
-| `askConversation`         | `ai.functions.ts`         | Q&A answered only from the messages, with inline citations `[3]`.       |
-| `transcribeAudio`         | `audio.functions.ts`      | Audio file → transcript → speaker-labeled turns.                        |
+| Function                   | File                 | Purpose                                                               |
+| -------------------------- | -------------------- | --------------------------------------------------------------------- |
+| `analyzeConversation`      | `ai.functions.ts`    | Full pipeline: chunk → extract per chunk (parallel) → merge → verify. |
+| `summarizeFor`             | `ai.functions.ts`    | On-demand summary for a level (TL;DR/Standard/Detailed) × role.       |
+| `extractTimelineSentiment` | `ai.functions.ts`    | Topic timeline + per-speaker sentiment scores.                        |
+| `askConversation`          | `ai.functions.ts`    | Q&A answered only from the messages, with inline citations `[3]`.     |
+| `transcribeAudio`          | `audio.functions.ts` | Audio file → Groq transcript → speaker-labeled turns.                 |
 
 ### The analysis pipeline (`analyzeConversation`)
 
@@ -133,7 +142,7 @@ A shared `LANGUAGE_RULES` prompt block (in `ai.functions.ts`) and a matching rul
 ### Audio transcription
 
 1. The browser converts any audio file (MP3, WAV, M4A, OGG, WebM — including mislabeled files) to 16 kHz mono WAV via Web Audio (`audio-convert.ts`). This avoids format rejections.
-2. The WAV (max 25 MB) is posted to the gateway transcription endpoint (`openai/gpt-transcribe`, streamed).
+2. The WAV (max 25 MB) is posted to Groq's transcription endpoint (`https://api.groq.com/openai/v1/audio/transcriptions`, model `whisper-large-v3`) using `GROQ_API_KEY`.
 3. The raw transcript has no speaker labels, so a second `callLLM` pass splits it into speaker turns, inferring names from context ("Speaker 1" fallback). Urdu/Hindi speech is romanized in this step.
 4. The result is returned as `Name: text` lines, which flow through the normal parser and analysis pipeline.
 
@@ -143,31 +152,229 @@ A shared `LANGUAGE_RULES` prompt block (in `ai.functions.ts`) and a matching rul
 
 **Current state: there is no server database yet.** Conversations persist in the browser's localStorage under the key `ttp:conversations:v1` (`src/lib/store.ts`). The three sample conversations in `src/data/samples.ts` are built in and merged with saved ones; they ship with pre-computed analysis so they open instantly with zero AI cost.
 
-### Planned schema (Lovable Cloud)
+### Planned schema
 
-The planned tables when Cloud is enabled:
+The planned tables when a real database is connected:
 
-| Table           | Key columns                                                                  |
-| --------------- | ---------------------------------------------------------------------------- |
-| `profiles`      | user id, display name                                                        |
-| `conversations` | title, source_type, language, raw_text, created_at                           |
-| `messages`      | conversation_id, speaker, timestamp, text, embedding (pgvector)              |
-| `summaries`     | conversation_id, level, role, content                                        |
+| Table           | Key columns                                                                                  |
+| --------------- | -------------------------------------------------------------------------------------------- |
+| `profiles`      | user id, display name                                                                        |
+| `conversations` | title, source_type, language, raw_text, created_at                                           |
+| `messages`      | conversation_id, speaker, timestamp, text, embedding (pgvector)                              |
+| `summaries`     | conversation_id, level, role, content                                                        |
 | `insights`      | conversation_id, type (key_point/decision/risk/question), text, confidence, source_message_ids |
-| `action_items`  | conversation_id, task, owner, due_date, priority, status, source_message_ids |
-| `shares`        | token, conversation_id, expires_at                                           |
+| `action_items`  | conversation_id, task, owner, due_date, priority, status, source_message_ids                 |
+| `shares`        | token, conversation_id, expires_at                                                           |
 
-Embeddings on `messages` power retrieval-based Q&A and cross-conversation memory. Migration to Cloud will replace `store.ts`; the rest of the app reads through the same hooks, so the UI won't change.
+Embeddings on `messages` power retrieval-based Q&A and cross-conversation memory. Migration to a real database will replace `store.ts`; the rest of the app reads through the same hooks, so the UI won't change.
 
 ---
 
-## 6. Privacy shield
+## 6. Migrating the database to your own Supabase account
+
+If you later enable Lovable Cloud (which provisions a managed Supabase project) and want to move everything to **your own personal Supabase account**, follow these steps.
+
+### Step 1 — Create your Supabase project
+
+1. Go to https://supabase.com and sign in (free tier is fine).
+2. Click **New project**, pick an organization, name it (e.g. `talktopoint`), set a strong database password (save it), and choose a region close to your users.
+3. Wait ~2 minutes for provisioning.
+
+### Step 2 — Export the schema and data from the old project
+
+**Option A — SQL dump (recommended):**
+
+1. In the old project, open **Project Settings → Database** and copy the connection string (or use the pooler string).
+2. Run `pg_dump` locally:
+
+```sh
+pg_dump "postgresql://postgres:[OLD-PASSWORD]@db.[OLD-PROJECT-REF].supabase.co:5432/postgres" \
+  --schema=public --clean --if-exists > backup.sql
+```
+
+**Option B — Dashboard export:** in the old project's **SQL Editor**, run `pg_dump` equivalents per table, or export each table as CSV from **Table Editor → ⋯ → Export to CSV**.
+
+### Step 3 — Create the schema in your new project
+
+In your new project's **SQL Editor**, run the schema (adapted from the planned schema above):
+
+```sql
+create extension if not exists vector;
+
+create table profiles (
+  id uuid primary key references auth.users on delete cascade,
+  display_name text,
+  created_at timestamptz default now()
+);
+
+create table conversations (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users on delete cascade,
+  title text not null,
+  source_type text default 'paste',
+  language text,
+  raw_text text not null,
+  created_at timestamptz default now()
+);
+
+create table messages (
+  id bigint generated always as identity primary key,
+  conversation_id uuid references conversations on delete cascade,
+  speaker text,
+  "timestamp" text,
+  text text not null,
+  embedding vector(768)
+);
+
+create table summaries (
+  id bigint generated always as identity primary key,
+  conversation_id uuid references conversations on delete cascade,
+  level text not null,
+  role text,
+  content text not null
+);
+
+create table insights (
+  id bigint generated always as identity primary key,
+  conversation_id uuid references conversations on delete cascade,
+  type text check (type in ('key_point','decision','risk','question')),
+  text text not null,
+  confidence real,
+  source_message_ids bigint[]
+);
+
+create table action_items (
+  id bigint generated always as identity primary key,
+  conversation_id uuid references conversations on delete cascade,
+  task text not null,
+  owner text,
+  due_date text,
+  priority text,
+  status text default 'todo',
+  source_message_ids bigint[]
+);
+
+create table shares (
+  token uuid primary key default gen_random_uuid(),
+  conversation_id uuid references conversations on delete cascade,
+  expires_at timestamptz
+);
+
+-- Row Level Security: users only see their own data
+alter table conversations enable row level security;
+alter table messages enable row level security;
+alter table summaries enable row level security;
+alter table insights enable row level security;
+alter table action_items enable row level security;
+
+create policy "own conversations" on conversations
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy "own messages" on messages for all using (
+  exists (select 1 from conversations c where c.id = conversation_id and c.user_id = auth.uid())
+);
+-- repeat the same "own ..." policy pattern for summaries, insights, action_items
+
+create policy "public shared reads" on conversations for select using (
+  exists (select 1 from shares s where s.conversation_id = id and (s.expires_at is null or s.expires_at > now()))
+);
+```
+
+### Step 4 — Import the data
+
+```sh
+psql "postgresql://postgres:[NEW-PASSWORD]@db.[NEW-PROJECT-REF].supabase.co:5432/postgres" < backup.sql
+```
+
+Or import the CSVs via **Table Editor → Import data from CSV**.
+
+### Step 5 — Point the app at your project
+
+1. In your new project, go to **Project Settings → API** and copy:
+   - **Project URL** (`https://[ref].supabase.co`)
+   - **anon public key** (safe for the browser)
+   - **service_role key** (server only — never expose it)
+2. Set these environment variables (locally in `.env`, on Vercel in the dashboard):
+
+```sh
+VITE_SUPABASE_URL=https://[ref].supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=your_anon_key
+SUPABASE_URL=https://[ref].supabase.co
+SUPABASE_PUBLISHABLE_KEY=your_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+```
+
+3. Replace `src/lib/store.ts` reads/writes with Supabase queries through `createServerFn` handlers (keys stay server-side; the browser uses the anon key with RLS enforcing per-user access).
+4. For auth (email + Google), enable providers in **Authentication → Providers**. For Google, create OAuth credentials in Google Cloud Console and paste the client ID/secret into Supabase.
+
+---
+
+## 7. Deploying to Vercel
+
+TanStack Start builds to a standard Node/serverless output that Vercel supports.
+
+### Step 1 — Push your code to GitHub
+
+```sh
+git init
+git add .
+git commit -m "TalktoPoint"
+git remote add origin https://github.com/<you>/talktopoint.git
+git push -u origin main
+```
+
+### Step 2 — Import into Vercel
+
+1. Go to https://vercel.com → **Add New → Project** → import your GitHub repo.
+2. Vercel auto-detects **Vite**. Keep the defaults:
+   - **Build command:** `npm run build`
+   - **Output directory:** `dist` (leave as detected)
+   - **Install command:** `npm install`
+3. Do **not** deploy yet — add environment variables first.
+
+### Step 3 — Add environment variables
+
+In the Vercel project → **Settings → Environment Variables**, add (for Production, Preview, and Development):
+
+| Name                         | Value                          | Notes                          |
+| ---------------------------- | ------------------------------ | ------------------------------ |
+| `GEMINI_API_KEY`             | your Gemini key                | same key as local              |
+| `GROQ_API_KEY`               | your Groq key                  | same key as local              |
+| `LOVABLE_API_KEY`            | your Lovable key (optional)    | fallback when Gemini is busy   |
+| `VITE_SUPABASE_URL`          | your Supabase project URL      | only if you migrated the DB    |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | your Supabase anon key      | only if you migrated the DB    |
+| `SUPABASE_URL`               | your Supabase project URL      | only if you migrated the DB    |
+| `SUPABASE_PUBLISHABLE_KEY`   | your Supabase anon key         | only if you migrated the DB    |
+| `SUPABASE_SERVICE_ROLE_KEY`  | your Supabase service_role key | server only, never `VITE_`     |
+
+The same `GEMINI_API_KEY` and `GROQ_API_KEY` values you use locally work on Vercel unchanged — both APIs are key-authenticated over HTTPS with no IP restrictions.
+
+### Step 4 — Deploy
+
+Click **Deploy**. Vercel builds the app and gives you a URL like `https://talktopoint.vercel.app`. Every push to `main` redeploys automatically; pull requests get preview deployments.
+
+### Step 5 — Post-deploy checks
+
+- Open the deployed URL and run one sample conversation end to end.
+- Upload a short audio file to confirm Groq transcription works in production.
+- If you enabled auth, add your Vercel domain to Supabase **Authentication → URL Configuration** (Site URL + redirect URLs), and to your Google OAuth client's authorized redirect URIs.
+- (Optional) Add a custom domain in Vercel → **Settings → Domains**.
+
+### Serverless notes
+
+- Server functions run as Vercel serverless functions — keep `process.env` reads inside handlers (the code already does this).
+- The free Hobby plan has a 10-second default function timeout; long audio transcriptions of large files may need the `maxDuration` bump (Pro plan) or shorter files.
+- Never commit `.env` — Vercel env vars are the production source of truth.
+
+---
+
+## 8. Privacy shield
 
 Before any text reaches the AI, `maskMessages` in `src/lib/parser.ts` replaces emails, phone numbers, and card numbers with tokens like `[EMAIL 1]`. Cards are checked before phones to avoid false matches. The UI shows a "N items masked" badge with a toggle to view the original text locally — the masked version is what the AI sees.
 
 ---
 
-## 7. Testing
+## 9. Testing
 
 ```sh
 npm run test
@@ -177,12 +384,16 @@ Vitest covers routing and core logic (`src/test/`). When changing the parser, st
 
 ---
 
-## 8. Troubleshooting
+## 10. Troubleshooting
 
-| Symptom                                   | Likely cause / fix                                                          |
-| ----------------------------------------- | --------------------------------------------------------------------------- |
-| "AI is not configured for this app"       | `LOVABLE_API_KEY` missing — outside Lovable, add it to `.env`.              |
-| "AI credits are used up"                  | The workspace is out of AI credits; add credits and retry.                  |
-| "We couldn't transcribe this audio file"  | File over 25 MB or no speech detected; try a shorter/clearer recording.     |
-| Urdu chat collapses into one message      | Speaker names must be followed by a colon (`Ali: hello`) — any script works. |
-| Analysis fails with "unreadable response" | Transient model issue; retry. The app never saves unvalidated output.       |
+| Symptom                                   | Likely cause / fix                                                              |
+| ----------------------------------------- | ------------------------------------------------------------------------------- |
+| "AI is not configured for this app"       | No `GEMINI_API_KEY` (and no `LOVABLE_API_KEY` fallback) — add it to `.env`.     |
+| "AI is busy right now"                    | Gemini free tier rate-limited; retry, or set `LOVABLE_API_KEY` as fallback.     |
+| "Transcription is not configured"         | `GROQ_API_KEY` missing — add it and restart the dev server.                     |
+| "Transcription is busy right now"         | Groq free tier rate limit (20 req/min) — wait a minute and retry.               |
+| "We couldn't transcribe this audio file"  | File over 25 MB or no speech detected; try a shorter/clearer recording.         |
+| Gemini error about `response_schema`      | Schema uses a shape Gemini rejects — check `toGeminiSchema` in `src/lib/llm.ts`. |
+| Urdu chat collapses into one message      | Speaker names must be followed by a colon (`Ali: hello`) — any script works.    |
+| Analysis fails with "unreadable response" | Transient model issue; retry. The app never saves unvalidated output.           |
+| Vercel build fails on env vars            | Add all variables to Preview **and** Production, then redeploy.                 |
