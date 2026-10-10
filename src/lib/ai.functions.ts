@@ -94,7 +94,8 @@ const verifyJson = {
 };
 const VerifyZ = z.object({ scores: z.array(z.object({ index: z.number(), confidence: z.number() })) });
 
-const CITE_RULES = `Write all output (title, tags, summaries, insights, actions) in the same language as the conversation messages. Cite source message ids inline in summaries using brackets like [3] or [3,8]. Every insight/action must list "sources" with the exact message ids supporting it. Dates as YYYY-MM-DD when inferable, else null. Owner "Unassigned" if unclear. Never invent facts.`;
+const LANGUAGE_RULES = `For Hindi or Urdu conversations, including mixed Hindi/Urdu-English and already romanized conversations, write all human-readable output in natural Roman Urdu using Latin letters only, never Urdu script or Devanagari. This applies to titles, tags, summaries, section headings, insights, action tasks, and owner names (transliterate names faithfully). Do not translate these conversations into English. For other languages, use the conversation's language. Keep schema enum values, source message ids, citation markers, dates, and privacy-mask tokens unchanged.`;
+const CITE_RULES = `${LANGUAGE_RULES} Cite source message ids inline in summaries using brackets like [3] or [3,8]. Every insight/action must list "sources" with the exact message ids supporting it. Dates as YYYY-MM-DD when inferable, else null. Owner "Unassigned" if unclear. Never invent facts.`;
 
 function chunk<T>(arr: T[], size: number) {
   const out: T[][] = [];
@@ -123,7 +124,9 @@ export const analyzeConversation = createServerFn({ method: "POST" })
         ),
       );
       // 2. Merge
-      let merged: Extract = parts[0]!;
+      const first = parts[0];
+      if (!first) throw new LLMError("No conversation analysis was returned.", 500);
+      let merged: Extract = first;
       if (parts.length > 1) {
         merged = await callLLM(
           `Merge these partial analyses of one conversation into a single deduplicated analysis. Keep source ids. ${CITE_RULES}\n\n${JSON.stringify(parts)}`,
@@ -208,7 +211,7 @@ export const summarizeFor = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     try {
       const r = await callLLM(
-        `Summarize this conversation for ${ROLE_HINT[data.role]}. Write the summary in the same language as the messages. Length: ${LEVEL_HINT[data.level]}. Cite message ids inline like [3] or [3,8]. Only use facts from the messages.\n\nMESSAGES:\n${fmt(data.messages)}`,
+        `Summarize this conversation for ${ROLE_HINT[data.role]}. ${LANGUAGE_RULES} Length: ${LEVEL_HINT[data.level]}. Cite message ids inline like [3] or [3,8]. Only use facts from the messages.\n\nMESSAGES:\n${fmt(data.messages)}`,
         {
           name: "summary",
           json: { type: "object", additionalProperties: false, required: ["summary"], properties: { summary: { type: "string" } } },
