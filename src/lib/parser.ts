@@ -7,8 +7,8 @@ const WHATSAPP = new RegExp(
 );
 // "[09:02] Name: msg" or "09:02 Name: msg"
 const TIMED = new RegExp(String.raw`^\[?(${TIME})\]?\s*[-–]?\s*([^:\[\]]{1,40}?):\s*(.*)$`);
-// "Name: msg"
-const PLAIN = /^([A-Z][\w .'()&-]{0,39}?):\s+(.*)$/;
+// "Name: msg" — any language/script (Urdu, Arabic, etc.), not just Latin capitals
+const PLAIN = /^([^\s:0-9][^:]{0,39}?):\s+(.*)$/;
 
 export function parseConversation(raw: string): Message[] {
   const out: Message[] = [];
