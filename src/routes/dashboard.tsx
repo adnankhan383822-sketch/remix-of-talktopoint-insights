@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { ChevronDown, FileText, Loader2, MessageCircle, Mic, Trash2, UploadCloud, Wand2 } from "lucide-react";
 import { transcribeAudio } from "@/lib/audio.functions";
+import { toWavFile } from "@/lib/audio-convert";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
