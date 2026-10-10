@@ -4,6 +4,7 @@ import type { z } from "zod";
 const GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 export const LLM_MODEL = "gemini-2.5-flash";
+const GATEWAY_MODEL = "google/gemini-3.8-flash"; // fallback when no GEMINI_API_KEY
 
 // Gemini's responseSchema is an OpenAPI subset: strip unsupported keywords.
 function toGeminiSchema(node: unknown): unknown {
@@ -103,15 +104,10 @@ export async function callLLM<T>(prompt: string, schema: LLMSchema<T>, system?: 
       "X-Lovable-AIG-SDK": "fetch",
     },
     body: JSON.stringify({
-      model: LLM_MODEL,
+      model: GATEWAY_MODEL,
       stream: true,
       messages: [
-        {
-          role: "system",
-          content:
-            system ??
-            "You are a precise conversation analyst. Only use facts present in the provided messages. Respond with JSON only.",
-        },
+        { role: "system", content: sys },
         { role: "user", content: prompt },
       ],
       response_format: {
