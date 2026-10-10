@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle2, CircleHelp, Gavel, Lightbulb, RefreshCw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CircleHelp, Clock3, Gavel, Lightbulb, MessageCircleQuestion, RefreshCw, Send, Smile, Users } from "lucide-react";
+import { Bar, BarChart, Cell, ReferenceLine, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { summarizeFor } from "@/lib/ai.functions";
+import { askConversation, extractTimelineSentiment, summarizeFor } from "@/lib/ai.functions";
 import type { ActionStatus, Conversation, InsightType, SummaryLevel, SummaryRole } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { SourceChips, TypewriterCited } from "./citations";
