@@ -439,3 +439,4 @@ Vitest covers routing and core logic (`src/test/`). When changing the parser, st
 | Urdu chat collapses into one message      | Speaker names must be followed by a colon (`Ali: hello`) — any script works.    |
 | Analysis fails with "unreadable response" | Transient model issue; retry. The app never saves unvalidated output.           |
 | Vercel build fails on env vars            | Add all variables to Preview **and** Production, then redeploy.                 |
+| Audio upload fails only on Vercel (`413`) | Vercel caps request bodies at 4.5 MB — use a shorter recording (see section 7). |

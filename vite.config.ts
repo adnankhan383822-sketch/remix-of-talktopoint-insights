@@ -9,7 +9,7 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 // Vercel sets VERCEL / VERCEL_ENV at build time. When building there, pin the
 // Vercel serverless target so the output is deployable; everywhere else (including
 // Lovable's own build, which pins Cloudflare) keeps the default target.
-const onVercel = Boolean(process.env.VERCEL || process.env.VERCEL_ENV);
+const onVercel = Boolean(process.env["VERCEL"] || process.env["VERCEL_ENV"]);
 
 export default defineConfig({
   tanstackStart: {
