@@ -3,7 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Clock, Copy, Download, Eye, EyeOff, Mail, MessageSquareText, RefreshCw, ShieldCheck, Smile,
+  ArrowLeft, Copy, Download, Eye, EyeOff, Mail, MessageSquareText, RefreshCw, ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +11,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AppHeader } from "@/components/app/AppHeader";
 import { CitationContext } from "@/components/app/citations";
 import { Transcript } from "@/components/app/Transcript";
-import { ActionsTab, AnalysisSkeleton, Empty, KeyPointsTab, SummaryTab } from "@/components/app/tabs";
+import {
+  ActionsTab, AnalysisSkeleton, AskAITab, Empty, KeyPointsTab, SentimentTab, SummaryTab, TimelineTab,
+} from "@/components/app/tabs";
 import { analyzeConversation } from "@/lib/ai.functions";
 import { toEmail, toMarkdown } from "@/lib/export";
 import { useConversation } from "@/lib/store";
@@ -195,9 +197,9 @@ function ConversationPage() {
                   <TabsContent value="summary"><SummaryTab conv={conv} onUpdate={update} /></TabsContent>
                   <TabsContent value="points"><KeyPointsTab conv={conv} /></TabsContent>
                   <TabsContent value="actions"><ActionsTab conv={conv} onUpdate={update} /></TabsContent>
-                  <TabsContent value="timeline"><Empty icon={<Clock className="h-5 w-5" />} text="Topic timeline is coming in the next update." /></TabsContent>
-                  <TabsContent value="sentiment"><Empty icon={<Smile className="h-5 w-5" />} text="Sentiment and talk-time charts are coming in the next update." /></TabsContent>
-                  <TabsContent value="ask"><Empty icon={<MessageSquareText className="h-5 w-5" />} text="Ask AI with cited answers is coming in the next update." /></TabsContent>
+                  <TabsContent value="timeline"><TimelineTab conv={conv} onUpdate={update} /></TabsContent>
+                  <TabsContent value="sentiment"><SentimentTab conv={conv} onUpdate={update} /></TabsContent>
+                  <TabsContent value="ask"><AskAITab conv={conv} /></TabsContent>
                 </Tabs>
               )}
             </section>

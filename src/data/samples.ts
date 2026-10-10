@@ -77,6 +77,23 @@ const startupAnalysis: Analysis = {
     { id: "s1-a3", task: "Update pricing page mockups", owner: "Priya", due: "2026-10-07", priority: "medium", status: "done", confidence: 0.92, sources: [9] },
     { id: "s1-a4", task: "Draft the launch email", owner: "Leo", due: "2026-10-08", priority: "medium", status: "todo", confidence: 0.95, sources: [12, 13] },
   ],
+  timeline: [
+    { topic: "Survey data & competitor benchmarks", start: "09:04", end: "09:05", sources: [2, 3] },
+    { topic: "Free tier debate and cap", start: "09:07", end: "09:09", sources: [4, 5] },
+    { topic: "Pricing decision: $29/month flat", start: "09:11", end: "09:14", sources: [6, 7, 8] },
+    { topic: "Launch prep: mockups, billing, email", start: "09:16", end: "09:23", sources: [9, 10, 12, 13] },
+    { topic: "Launch traffic risk & mitigation", start: "09:20", end: "09:22", sources: [11, 12] },
+    { topic: "Distribution & annual pricing", start: "09:25", end: "09:28", sources: [14, 15, 16] },
+  ],
+  sentiment: {
+    overall: "Focused and collaborative — the team aligned fast, with a touch of caution about launch traffic near the end.",
+    speakers: [
+      { name: "Maya", score: 0.55 },
+      { name: "Priya", score: 0.5 },
+      { name: "Dev", score: 0.35 },
+      { name: "Leo", score: 0.2 },
+    ],
+  },
 };
 
 const meetingAnalysis: Analysis = {
@@ -106,6 +123,23 @@ const meetingAnalysis: Analysis = {
     { id: "s2-a3", task: "Tell Leo and Priya about the pricing change", owner: "Maya", due: "2026-10-06", priority: "medium", status: "done", confidence: 0.9, sources: [14, 15] },
     { id: "s2-a4", task: "Implement per-seat billing", owner: "Dev", due: "2026-10-27", priority: "high", status: "todo", confidence: 0.78, sources: [7] },
   ],
+  timeline: [
+    { topic: "Agenda setting", start: "00:00:15", end: "00:00:15", sources: [1] },
+    { topic: "Unit economics at $29 flat", start: "00:01:02", end: "00:02:18", sources: [2, 3, 4] },
+    { topic: "Pricing reversal: $39 per seat", start: "00:03:05", end: "00:04:45", sources: [5, 6, 7, 8] },
+    { topic: "Q4 roadmap: Slack, then Zoom", start: "00:06:20", end: "00:07:05", sources: [9, 10] },
+    { topic: "Mobile: no native app in 2026", start: "00:09:30", end: "00:10:02", sources: [11, 12] },
+    { topic: "Follow-ups & known risks", start: "00:11:15", end: "00:14:05", sources: [13, 14, 15, 16] },
+  ],
+  sentiment: {
+    overall: "Analytical and slightly tense while reversing last week's pricing decision, then constructive as the roadmap settled.",
+    speakers: [
+      { name: "Sam", score: 0.4 },
+      { name: "Nina", score: 0.3 },
+      { name: "Maya", score: 0.15 },
+      { name: "Dev", score: 0.1 },
+    ],
+  },
 };
 
 const supportAnalysis: Analysis = {
@@ -134,6 +168,20 @@ const supportAnalysis: Analysis = {
     { id: "s3-a3", task: "Call customer if the fix date slips", owner: "Ana (Support)", due: null, priority: "low", status: "todo", confidence: 0.82, sources: [11, 12] },
     { id: "s3-a4", task: "Process duplicate-charge refund", owner: "Ana (Support)", due: "2026-10-10", priority: "high", status: "done", confidence: 0.97, sources: [6] },
   ],
+  timeline: [
+    { topic: "Duplicate charge reported", start: "14:02", end: "14:04", sources: [1, 2] },
+    { topic: "Verification, masking & refund", start: "14:05", end: "14:10", sources: [3, 4, 6] },
+    { topic: "PDF export bug investigation", start: "14:08", end: "14:16", sources: [5, 8, 10] },
+    { topic: "Escalation & follow-up plan", start: "14:14", end: "14:19", sources: [9, 11, 12] },
+    { topic: "Wrap-up", start: "14:19", end: "14:20", sources: [13] },
+  ],
+  sentiment: {
+    overall: "Started frustrated about the double charge, ended satisfied after a fast refund and a clear fix date.",
+    speakers: [
+      { name: "Ana (Support)", score: 0.6 },
+      { name: "Jordan Lee", score: -0.25 },
+    ],
+  },
 };
 
 function build(
