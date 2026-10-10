@@ -24,7 +24,8 @@ function encodeWav(audio: AudioBuffer): Blob {
   for (let ch = 0; ch < audio.numberOfChannels; ch++) {
     const data = audio.getChannelData(ch);
     for (let i = 0; i < outLen; i++) {
-      out[i] += data[Math.min(audio.length - 1, Math.floor(i * ratio))] / audio.numberOfChannels;
+      const sample = data[Math.min(audio.length - 1, Math.floor(i * ratio))] ?? 0;
+      out[i] = (out[i] ?? 0) + sample / audio.numberOfChannels;
     }
   }
   const bytes = new ArrayBuffer(44 + outLen * 2);
@@ -46,7 +47,7 @@ function encodeWav(audio: AudioBuffer): Blob {
   writeStr(36, "data");
   v.setUint32(40, outLen * 2, true);
   for (let i = 0; i < outLen; i++) {
-    const s = Math.max(-1, Math.min(1, out[i]));
+    const s = Math.max(-1, Math.min(1, out[i] ?? 0));
     v.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
   }
   return new Blob([bytes], { type: "audio/wav" });
