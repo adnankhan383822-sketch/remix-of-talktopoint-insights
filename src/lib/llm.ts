@@ -155,14 +155,5 @@ export async function callLLM<T>(prompt: string, schema: LLMSchema<T>, system?: 
     }
   }
 
-  const cleaned = content.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/, "");
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    throw new LLMError("The AI returned an unreadable response. Please retry.", 502);
-  }
-  const result = schema.zod.safeParse(parsed);
-  if (!result.success) throw new LLMError("The AI response didn't match the expected format.", 502);
-  return result.data;
+  return validate(content, schema);
 }
