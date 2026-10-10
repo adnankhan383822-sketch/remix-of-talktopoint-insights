@@ -94,7 +94,7 @@ const verifyJson = {
 };
 const VerifyZ = z.object({ scores: z.array(z.object({ index: z.number(), confidence: z.number() })) });
 
-const CITE_RULES = `Cite source message ids inline in summaries using brackets like [3] or [3,8]. Every insight/action must list "sources" with the exact message ids supporting it. Dates as YYYY-MM-DD when inferable, else null. Owner "Unassigned" if unclear. Never invent facts.`;
+const CITE_RULES = `Write all output (title, tags, summaries, insights, actions) in the same language as the conversation messages. Cite source message ids inline in summaries using brackets like [3] or [3,8]. Every insight/action must list "sources" with the exact message ids supporting it. Dates as YYYY-MM-DD when inferable, else null. Owner "Unassigned" if unclear. Never invent facts.`;
 
 function chunk<T>(arr: T[], size: number) {
   const out: T[][] = [];
@@ -208,7 +208,7 @@ export const summarizeFor = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     try {
       const r = await callLLM(
-        `Summarize this conversation for ${ROLE_HINT[data.role]}. Length: ${LEVEL_HINT[data.level]}. Cite message ids inline like [3] or [3,8]. Only use facts from the messages.\n\nMESSAGES:\n${fmt(data.messages)}`,
+        `Summarize this conversation for ${ROLE_HINT[data.role]}. Write the summary in the same language as the messages. Length: ${LEVEL_HINT[data.level]}. Cite message ids inline like [3] or [3,8]. Only use facts from the messages.\n\nMESSAGES:\n${fmt(data.messages)}`,
         {
           name: "summary",
           json: { type: "object", additionalProperties: false, required: ["summary"], properties: { summary: { type: "string" } } },
