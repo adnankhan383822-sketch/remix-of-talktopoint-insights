@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { askConversation, extractTimelineSentiment, summarizeFor } from "@/lib/ai.functions";
 import type { ActionStatus, Conversation, InsightType, SummaryLevel, SummaryRole } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { SourceChips, TypewriterCited } from "./citations";
+import { CitedText, SourceChips, TypewriterCited } from "./citations";
 
 export function AnalysisSkeleton() {
   return (
