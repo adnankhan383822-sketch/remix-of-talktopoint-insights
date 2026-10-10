@@ -13,6 +13,11 @@ function toGeminiSchema(node: unknown): unknown {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
       if (k === "additionalProperties") continue;
+      // Gemini rejects union types like ["string","null"] — keep the first real type.
+      if (k === "type" && Array.isArray(v)) {
+        out[k] = v.find((t) => t !== "null") ?? "string";
+        continue;
+      }
       out[k] = toGeminiSchema(v);
     }
     return out;
