@@ -2,8 +2,8 @@
 import type { z } from "zod";
 
 const GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
-const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
-export const LLM_MODEL = "gemini-2.5-flash";
+const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent";
+export const LLM_MODEL = "gemini-3.8-flash";
 const GATEWAY_MODEL = "google/gemini-3.8-flash"; // fallback when no GEMINI_API_KEY
 
 // Gemini's responseSchema is an OpenAPI subset: strip unsupported keywords.
