@@ -2,7 +2,67 @@
 import type { z } from "zod";
 
 const GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
-export const LLM_MODEL = "google/gemini-3.8-flash";
+const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+export const LLM_MODEL = "gemini-2.5-flash";
+
+// Gemini's responseSchema is an OpenAPI subset: strip unsupported keywords.
+function toGeminiSchema(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(toGeminiSchema);
+  if (node && typeof node === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+      if (k === "additionalProperties") continue;
+      out[k] = toGeminiSchema(v);
+    }
+    return out;
+  }
+  return node;
+}
+
+/** Direct Gemini call (free tier) with strict JSON output. */
+async function callGemini<T>(prompt: string, schema: LLMSchema<T>, system: string, key: string): Promise<T> {
+  const res = await fetch(`${GEMINI_URL}?key=${key}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: system }] },
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: toGeminiSchema(schema.json),
+      },
+    }),
+  });
+  if (!res.ok) {
+    let msg = `AI request failed (${res.status}).`;
+    try {
+      const j = await res.json();
+      msg = j?.error?.message ?? msg;
+    } catch {
+      /* ignore */
+    }
+    if (res.status === 429) msg = "The AI is busy right now (rate limited). Please try again in a moment.";
+    if (res.status === 400 && /API key/i.test(msg)) msg = "The Gemini API key is invalid. Please update GEMINI_API_KEY.";
+    throw new LLMError(msg, res.status);
+  }
+  const j = await res.json();
+  const content: string = j?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("") ?? "";
+  if (!content) throw new LLMError("The AI returned an empty response. Please retry.", 502);
+  return validate(content, schema);
+}
+
+function validate<T>(content: string, schema: LLMSchema<T>): T {
+  const cleaned = content.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/, "");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    throw new LLMError("The AI returned an unreadable response. Please retry.", 502);
+  }
+  const result = schema.zod.safeParse(parsed);
+  if (!result.success) throw new LLMError("The AI response didn't match the expected format.", 502);
+  return result.data;
+}
 
 export class LLMError extends Error {
   constructor(
