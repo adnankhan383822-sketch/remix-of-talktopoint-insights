@@ -98,7 +98,7 @@ export const transcribeAudio = createServerFn({ method: "POST" })
       let lines: string;
       try {
         const r = await callLLM(
-          `This is a raw transcript of an audio recording with no speaker labels. Split it into speaker turns in order. Infer distinct speakers from context (names mentioned, question/answer flow, changes of voice). Use real names when they are said, otherwise "Speaker 1", "Speaker 2". Keep the wording as close to the original as possible; do not summarize or drop content.\n\nTRANSCRIPT:\n${transcript}`,
+          `This is a raw transcript of an audio recording with no speaker labels. Split it into speaker turns in order. Infer distinct speakers from context (names mentioned, question/answer flow, changes of voice). Use real names when they are said, otherwise "Speaker 1", "Speaker 2". Keep the wording as close to the original as possible; do not summarize or drop content.\n\nLANGUAGE RULE: If the speech is Urdu or Hindi (or mixed Urdu/Hindi-English), write every turn in natural Roman Urdu using Latin letters only — never Urdu script or Devanagari, and do not translate to English. Other languages stay in their original script.\n\nTRANSCRIPT:\n${transcript}`,
           { name: "speaker_turns", json: turnsJson, zod: TurnsZ },
         );
         lines = r.turns
