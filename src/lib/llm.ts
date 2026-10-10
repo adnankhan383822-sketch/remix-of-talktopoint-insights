@@ -13,6 +13,11 @@ function toGeminiSchema(node: unknown): unknown {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
       if (k === "additionalProperties") continue;
+      // Gemini rejects union types like ["string","null"] — keep the first real type.
+      if (k === "type" && Array.isArray(v)) {
+        out[k] = v.find((t) => t !== "null") ?? "string";
+        continue;
+      }
       out[k] = toGeminiSchema(v);
     }
     return out;
@@ -91,9 +96,17 @@ export async function callLLM<T>(prompt: string, schema: LLMSchema<T>, system?: 
 
   // Prefer the free direct Gemini key; fall back to the Lovable gateway.
   const geminiKey = process.env["GEMINI_API_KEY"];
-  if (geminiKey) return callGemini(prompt, schema, sys, geminiKey);
-
   const key = process.env["LOVABLE_API_KEY"];
+  if (geminiKey) {
+    try {
+      return await callGemini(prompt, schema, sys, geminiKey);
+    } catch (e) {
+      // Free tier is often busy/rate-limited — fall back to the gateway when possible.
+      const retryable = e instanceof LLMError && (e.status === 429 || e.status >= 500);
+      if (!retryable || !key) throw e;
+      console.warn("Gemini unavailable, falling back to gateway", e);
+    }
+  }
   if (!key) throw new LLMError("AI is not configured for this app.", 500);
 
   const res = await fetch(GATEWAY, {
