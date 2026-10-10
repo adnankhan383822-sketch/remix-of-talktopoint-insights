@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { AlertTriangle, CheckCircle2, CircleHelp, Clock3, Gavel, Lightbulb, MessageCircleQuestion, RefreshCw, Send, Smile, Users } from "lucide-react";
