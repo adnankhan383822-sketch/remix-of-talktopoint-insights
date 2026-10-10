@@ -311,7 +311,27 @@ SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 
 ## 7. Deploying to Vercel
 
-TanStack Start builds to a standard Node/serverless output that Vercel supports.
+**There is no database in this build.** Conversations are saved in each visitor's
+own browser, so what lands on Vercel is the frontend plus a few server functions
+that call Gemini and Groq. Nothing else has to exist for the app to work.
+
+### What the build produces
+
+`npm run build` runs Vite + Nitro. `vite.config.ts` pins the Vercel target
+(`nitro: { preset: "vercel" }`) whenever Vercel's own `VERCEL` / `VERCEL_ENV`
+variables are set, and leaves Lovable's Cloudflare target untouched otherwise.
+The build writes Vercel's Build Output API v3 layout:
+
+```text
+.vercel/output/
+├── static/                  # the browser bundle
+├── functions/__server.func  # SSR + every server function (AI, transcription)
+└── config.json
+```
+
+Vercel reads this on its own — you do not configure an output directory.
+(Verified locally by running the build with `VERCEL=1 VERCEL_ENV=production` and
+the Lovable sandbox flags removed; it emitted exactly the tree above.)
 
 ### Step 1 — Push your code to GitHub
 
@@ -326,45 +346,67 @@ git push -u origin main
 ### Step 2 — Import into Vercel
 
 1. Go to https://vercel.com → **Add New → Project** → import your GitHub repo.
-2. Vercel auto-detects **Vite**. Keep the defaults:
+2. Framework preset: **Vite** (auto-detected). Keep the defaults:
    - **Build command:** `npm run build`
-   - **Output directory:** `dist` (leave as detected)
+   - **Output directory:** leave it empty — Vercel picks up `.vercel/output`.
    - **Install command:** `npm install`
 3. Do **not** deploy yet — add environment variables first.
 
 ### Step 3 — Add environment variables
 
-In the Vercel project → **Settings → Environment Variables**, add (for Production, Preview, and Development):
+Only two are required. In **Settings → Environment Variables**, add both and tick
+**Production, Preview and Development**:
 
-| Name                         | Value                          | Notes                          |
-| ---------------------------- | ------------------------------ | ------------------------------ |
-| `GEMINI_API_KEY`             | your Gemini key                | same key as local              |
-| `GROQ_API_KEY`               | your Groq key                  | same key as local              |
-| `LOVABLE_API_KEY`            | your Lovable key (optional)    | fallback when Gemini is busy   |
-| `VITE_SUPABASE_URL`          | your Supabase project URL      | only if you migrated the DB    |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | your Supabase anon key      | only if you migrated the DB    |
-| `SUPABASE_URL`               | your Supabase project URL      | only if you migrated the DB    |
-| `SUPABASE_PUBLISHABLE_KEY`   | your Supabase anon key         | only if you migrated the DB    |
-| `SUPABASE_SERVICE_ROLE_KEY`  | your Supabase service_role key | server only, never `VITE_`     |
+| Name             | Value                                      | What it powers                                       |
+| ---------------- | ------------------------------------------ | ---------------------------------------------------- |
+| `GEMINI_API_KEY` | your key from aistudio.google.com          | summaries, key points, actions, timeline, sentiment, Ask AI |
+| `GROQ_API_KEY`   | your `gsk_...` key from console.groq.com   | audio transcription (Whisper large-v3)               |
 
-The same `GEMINI_API_KEY` and `GROQ_API_KEY` values you use locally work on Vercel unchanged — both APIs are key-authenticated over HTTPS with no IP restrictions.
+The same values you use locally work unchanged — both APIs are key-authenticated
+over HTTPS with no IP allow-list.
+
+What **not** to add:
+
+| Name                     | Verdict                                                            |
+| ------------------------ | ------------------------------------------------------------------ |
+| `LOVABLE_API_KEY`        | Skip. Lovable-managed; only a fallback when Gemini is busy.         |
+| `SUPABASE_*` / `VITE_SUPABASE_*` | Only after section 6 is done **and** the code is wired to Supabase. |
 
 ### Step 4 — Deploy
 
-Click **Deploy**. Vercel builds the app and gives you a URL like `https://talktopoint.vercel.app`. Every push to `main` redeploys automatically; pull requests get preview deployments.
+Click **Deploy**. Vercel builds the app and gives you a URL like
+`https://talktopoint.vercel.app`. Every push to `main` redeploys automatically;
+pull requests get preview deployments.
 
 ### Step 5 — Post-deploy checks
 
-- Open the deployed URL and run one sample conversation end to end.
-- Upload a short audio file to confirm Groq transcription works in production.
-- If you enabled auth, add your Vercel domain to Supabase **Authentication → URL Configuration** (Site URL + redirect URLs), and to your Google OAuth client's authorized redirect URIs.
+- Open the URL and run one sample conversation end to end (summary, key points, actions).
+- Upload a short recording to confirm Groq transcription works in production.
+- Ask AI a question and click a citation chip to confirm it jumps to the message.
 - (Optional) Add a custom domain in Vercel → **Settings → Domains**.
 
-### Serverless notes
+### Limits that affect this app
 
-- Server functions run as Vercel serverless functions — keep `process.env` reads inside handlers (the code already does this).
-- The free Hobby plan has a 10-second default function timeout; long audio transcriptions of large files may need the `maxDuration` bump (Pro plan) or shorter files.
-- Never commit `.env` — Vercel env vars are the production source of truth.
+- **4.5 MB request body.** Every POST to a Vercel function is capped at 4.5 MB;
+  larger uploads return `413 FUNCTION_PAYLOAD_TOO_LARGE`. Audio is converted to
+  16 kHz mono WAV (≈32 KB per second) before upload, so a recording longer than
+  roughly **2 minutes** trips it even though the app itself allows 25 MB. Keep
+  demo recordings short, or drop the sample rate for long files.
+- **Function duration:** 300 s (5 minutes) on the free Hobby plan — far more than
+  transcription and analysis need.
+- **Gemini free tier** intermittently answers "high demand, try again later". With
+  no `LOVABLE_API_KEY` there is no fallback, so the app shows a friendly error —
+  clicking again usually works.
+- **No server-side session:** data is browser-local, so a share link opened on
+  another device shows an empty conversation. Fixing that needs the database in
+  section 6.
+
+### Notes
+
+- Server functions become Vercel functions — `process.env` reads stay inside
+  handlers (the code already does this).
+- Never commit `.env`; Vercel's environment variables are the production source of truth.
+- If you ever run the build locally with `VERCEL=1`, add `.vercel/` to `.gitignore`.
 
 ---
 
@@ -397,3 +439,4 @@ Vitest covers routing and core logic (`src/test/`). When changing the parser, st
 | Urdu chat collapses into one message      | Speaker names must be followed by a colon (`Ali: hello`) — any script works.    |
 | Analysis fails with "unreadable response" | Transient model issue; retry. The app never saves unvalidated output.           |
 | Vercel build fails on env vars            | Add all variables to Preview **and** Production, then redeploy.                 |
+| Audio upload fails only on Vercel (`413`) | Vercel caps request bodies at 4.5 MB — use a shorter recording (see section 7). |
