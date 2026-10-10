@@ -2,7 +2,7 @@
 import type { z } from "zod";
 
 const GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
-export const LLM_MODEL = "google/gemini-3.5-flash";
+export const LLM_MODEL = "google/gemini-3.8-flash";
 
 export class LLMError extends Error {
   constructor(
