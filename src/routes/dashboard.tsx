@@ -82,10 +82,23 @@ function Dashboard() {
       return;
     }
     setAudioBusy(true);
-    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-    const mime = file.type.startsWith("audio/") ? file.type : AUDIO_MIME[ext] ?? "audio/mpeg";
+    // Normalize to clean WAV so mislabeled/unusual files (e.g. voice notes
+    // renamed to .mp3) are accepted by the transcription service.
+    let upload = file;
+    try {
+      upload = await toWavFile(file);
+    } catch {
+      toast.error("Couldn't read this audio file", { description: "The file may be corrupted or in a format your browser can't play." });
+      setAudioBusy(false);
+      return;
+    }
+    if (upload.size > 25 * 1024 * 1024) {
+      toast.error("Recording is too long (max ~13 minutes).");
+      setAudioBusy(false);
+      return;
+    }
     const fd = new FormData();
-    fd.append("file", new File([file], file.name, { type: mime }));
+    fd.append("file", upload);
     const res = await transcribe({ data: fd }).catch(() => ({ ok: false as const, error: "Network error — please retry." }));
     setAudioBusy(false);
     if (!res.ok) {
