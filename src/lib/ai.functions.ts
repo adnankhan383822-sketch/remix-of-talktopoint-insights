@@ -123,7 +123,7 @@ export const analyzeConversation = createServerFn({ method: "POST" })
         ),
       );
       // 2. Merge
-      let merged: Extract = parts[0];
+      let merged: Extract = parts[0]!;
       if (parts.length > 1) {
         merged = await callLLM(
           `Merge these partial analyses of one conversation into a single deduplicated analysis. Keep source ids. ${CITE_RULES}\n\n${JSON.stringify(parts)}`,
@@ -166,15 +166,15 @@ export const analyzeConversation = createServerFn({ method: "POST" })
           },
           insights: merged.insights.map((ins, i) => ({
             ...ins,
-            sources: claims[i].sources,
-            confidence: conf(i, claims[i].sources),
+            sources: claims[i]?.sources ?? [],
+            confidence: conf(i, claims[i]?.sources ?? []),
           })),
           actions: merged.actions.map((a, i) => ({
             ...a,
             id: crypto.randomUUID(),
             status: "todo" as const,
-            sources: claims[nI + i].sources,
-            confidence: conf(nI + i, claims[nI + i].sources),
+            sources: claims[nI + i]?.sources ?? [],
+            confidence: conf(nI + i, claims[nI + i]?.sources ?? []),
           })),
         },
       };

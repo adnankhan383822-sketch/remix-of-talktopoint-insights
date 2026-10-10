@@ -59,6 +59,6 @@ export interface Conversation {
   messages: Message[];
   masked: MaskItem[];
   status: "analyzing" | "ready" | "error";
-  error?: string;
+  error?: string | undefined;
   analysis?: Analysis;
 }

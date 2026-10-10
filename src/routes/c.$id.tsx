@@ -185,8 +185,8 @@ function ConversationPage() {
                     {[
                       ["summary", "Summary"], ["points", "Key Points"], ["actions", "Actions"],
                       ["timeline", "Timeline"], ["sentiment", "Sentiment"], ["ask", "Ask AI"],
-                    ].map(([v, l]) => (
-                      <TabsTrigger key={v} value={v} className="rounded-xl px-3.5 py-1.5">
+                    ].map(([v, l]) => v && (
+                      <TabsTrigger key={v} value={v!} className="rounded-xl px-3.5 py-1.5">
                         {l}
                         {v === "actions" && <span className="ml-1.5 rounded-full bg-primary/15 px-1.5 text-[10px] text-primary">{conv.analysis!.actions.length}</span>}
                       </TabsTrigger>
