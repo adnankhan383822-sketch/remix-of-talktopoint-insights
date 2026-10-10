@@ -84,6 +84,14 @@ export interface LLMSchema<T> {
  * Swap the provider here without touching any feature code.
  */
 export async function callLLM<T>(prompt: string, schema: LLMSchema<T>, system?: string): Promise<T> {
+  const sys =
+    system ??
+    "You are a precise conversation analyst. Only use facts present in the provided messages. Respond with JSON only.";
+
+  // Prefer the free direct Gemini key; fall back to the Lovable gateway.
+  const geminiKey = process.env["GEMINI_API_KEY"];
+  if (geminiKey) return callGemini(prompt, schema, sys, geminiKey);
+
   const key = process.env["LOVABLE_API_KEY"];
   if (!key) throw new LLMError("AI is not configured for this app.", 500);
 
