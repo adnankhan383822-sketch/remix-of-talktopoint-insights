@@ -55,7 +55,7 @@ function Inline({ text }: { text: string }) {
   let last = 0;
   for (const m of text.matchAll(CITE)) {
     parts.push(<Bold key={`t${last}`} text={text.slice(last, m.index)} />);
-    const ids = m[1].split(",").map((s) => Number(s.trim()));
+    const ids = (m[1] ?? "").split(",").map((s) => Number(s.trim()));
     parts.push(<SourceChips key={`c${m.index}`} ids={ids} />);
     last = (m.index ?? 0) + m[0].length;
   }

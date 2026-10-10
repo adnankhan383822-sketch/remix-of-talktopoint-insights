@@ -21,21 +21,21 @@ export function parseConversation(raw: string): Message[] {
     let text = "";
     let m = t.match(WHATSAPP);
     if (m) {
-      ts = m[2];
-      speaker = m[3];
-      text = m[4];
+      ts = m[2] ?? null;
+      speaker = m[3] ?? null;
+      text = m[4] ?? "";
     } else if ((m = t.match(TIMED))) {
-      ts = m[1];
-      speaker = m[2];
-      text = m[3];
+      ts = m[1] ?? null;
+      speaker = m[2] ?? null;
+      text = m[3] ?? "";
     } else if ((m = t.match(PLAIN))) {
-      speaker = m[1];
-      text = m[2];
+      speaker = m[1] ?? null;
+      text = m[2] ?? "";
     }
     if (speaker) {
       out.push({ id: out.length + 1, speaker: speaker.trim(), timestamp: ts?.trim() ?? null, text });
     } else if (out.length) {
-      out[out.length - 1].text += "\n" + t;
+      out[out.length - 1]!.text += "\n" + t;
     } else {
       out.push({ id: 1, speaker: "Unknown", timestamp: null, text: t });
     }

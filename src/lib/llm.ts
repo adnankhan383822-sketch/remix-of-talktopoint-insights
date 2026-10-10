@@ -24,7 +24,7 @@ export interface LLMSchema<T> {
  * Swap the provider here without touching any feature code.
  */
 export async function callLLM<T>(prompt: string, schema: LLMSchema<T>, system?: string): Promise<T> {
-  const key = process.env.LOVABLE_API_KEY;
+  const key = process.env["LOVABLE_API_KEY"];
   if (!key) throw new LLMError("AI is not configured for this app.", 500);
 
   const res = await fetch(GATEWAY, {

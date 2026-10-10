@@ -77,7 +77,10 @@ function Dashboard() {
   };
 
   const onAudio = async (file: File) => {
-    if (file.size > 25 * 1024 * 1024) return toast.error("Audio file is too large (max 25 MB).");
+    if (file.size > 25 * 1024 * 1024) {
+      toast.error("Audio file is too large (max 25 MB).");
+      return;
+    }
     setAudioBusy(true);
     const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
     const mime = file.type.startsWith("audio/") ? file.type : AUDIO_MIME[ext] ?? "audio/mpeg";
@@ -85,7 +88,10 @@ function Dashboard() {
     fd.append("file", new File([file], file.name, { type: mime }));
     const res = await transcribe({ data: fd }).catch(() => ({ ok: false as const, error: "Network error — please retry." }));
     setAudioBusy(false);
-    if (!res.ok) return toast.error("Couldn't process the recording", { description: res.error });
+    if (!res.ok) {
+      toast.error("Couldn't process the recording", { description: res.error });
+      return;
+    }
     toast.success("Transcribed! Analyzing now…");
     create(res.text, "upload", file.name.replace(/\.\w+$/, ""));
   };
@@ -93,12 +99,18 @@ function Dashboard() {
   const onFile = async (file: File) => {
     if (audioBusy) return;
     const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-    if (file.type.startsWith("audio/") || ext in AUDIO_MIME) return onAudio(file);
+    if (file.type.startsWith("audio/") || ext in AUDIO_MIME) {
+      await onAudio(file);
+      return;
+    }
     if (ext !== "txt" && file.type !== "text/plain") {
       toast.error("Unsupported file", { description: "Use .txt or an audio file (.mp3, .wav, .m4a). PDF/DOCX coming next." });
       return;
     }
-    if (file.size > 2_000_000) return toast.error("File is too large (max 2 MB).");
+    if (file.size > 2_000_000) {
+      toast.error("File is too large (max 2 MB).");
+      return;
+    }
     create(await file.text(), "upload", file.name.replace(/\.\w+$/, ""));
   };
 
