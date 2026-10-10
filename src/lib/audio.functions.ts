@@ -2,8 +2,9 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { callLLM, LLMError } from "./llm";
 
-const TRANSCRIBE_URL = "https://ai.gateway.lovable.dev/v1/audio/transcriptions";
-const TRANSCRIBE_MODEL = "openai/gpt-transcribe";
+// Free transcription via Groq Whisper (OpenAI-compatible endpoint).
+const TRANSCRIBE_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
+const TRANSCRIBE_MODEL = "whisper-large-v3";
 const MAX_BYTES = 25 * 1024 * 1024;
 
 const TurnsZ = z.object({ turns: z.array(z.object({ speaker: z.string(), text: z.string() })) });
@@ -29,17 +30,16 @@ async function transcribe(file: File, key: string): Promise<string> {
   form.append("model", TRANSCRIBE_MODEL);
   form.append("file", file, file.name);
   form.append("response_format", "json");
-  form.append("stream", "true");
   const res = await fetch(TRANSCRIBE_URL, {
     method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "X-Lovable-AIG-SDK": "fetch" },
+    headers: { Authorization: `Bearer ${key}` },
     body: form,
   });
-  if (!res.ok || !res.body) {
-    const body = await res.text().catch(() => "");
+  const body = await res.text().catch(() => "");
+  if (!res.ok) {
     console.error("transcription failed", res.status, body);
     if (res.status === 429) throw new LLMError("Transcription is busy right now. Please try again in a moment.", 429);
-    if (res.status === 402) throw new LLMError("AI credits are used up for this workspace.", 402);
+    if (res.status === 401) throw new LLMError("The transcription key is invalid. Please update GROQ_API_KEY.", 401);
     let msg = "We couldn't transcribe this audio file.";
     try {
       msg = JSON.parse(body)?.error?.message ?? msg;
@@ -48,32 +48,11 @@ async function transcribe(file: File, key: string): Promise<string> {
     }
     throw new LLMError(msg, res.status);
   }
-  const reader = res.body.getReader();
-  const dec = new TextDecoder();
-  let buf = "";
-  let deltas = "";
-  let final = "";
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += dec.decode(value, { stream: true });
-    const lines = buf.split("\n");
-    buf = lines.pop() ?? "";
-    for (const line of lines) {
-      const t = line.trim();
-      if (!t.startsWith("data:")) continue;
-      const data = t.slice(5).trim();
-      if (!data || data === "[DONE]") continue;
-      try {
-        const j = JSON.parse(data);
-        if (j.type === "transcript.text.delta") deltas += j.delta ?? "";
-        if (j.type === "transcript.text.done") final = j.text ?? "";
-      } catch {
-        /* partial */
-      }
-    }
+  try {
+    return String(JSON.parse(body)?.text ?? "").trim();
+  } catch {
+    return "";
   }
-  return (final || deltas).trim();
 }
 
 /** Upload audio -> transcript -> speaker turns, returned as "Speaker: text" lines. */
@@ -89,8 +68,8 @@ export const transcribeAudio = createServerFn({ method: "POST" })
       const { file } = data;
       if (!file.size) throw new LLMError("The audio file is empty.", 400);
       if (file.size > MAX_BYTES) throw new LLMError("Audio file is too large (max 25 MB).", 400);
-      const key = process.env["LOVABLE_API_KEY"];
-      if (!key) throw new LLMError("AI is not configured for this app.", 500);
+      const key = process.env["GROQ_API_KEY"];
+      if (!key) throw new LLMError("Transcription is not configured (missing GROQ_API_KEY).", 500);
 
       const transcript = await transcribe(file, key);
       if (!transcript) throw new LLMError("No speech was detected in this recording.", 422);
