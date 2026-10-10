@@ -111,6 +111,7 @@ function Dashboard() {
   };
 
   const onFile = async (file: File) => {
+    console.log("[ttp] onFile", file.name, file.type, file.size);
     if (audioBusy) return;
     const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
     if (file.type.startsWith("audio/") || ext in AUDIO_MIME) {
