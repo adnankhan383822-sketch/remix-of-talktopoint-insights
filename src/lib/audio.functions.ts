@@ -68,8 +68,8 @@ export const transcribeAudio = createServerFn({ method: "POST" })
       const { file } = data;
       if (!file.size) throw new LLMError("The audio file is empty.", 400);
       if (file.size > MAX_BYTES) throw new LLMError("Audio file is too large (max 25 MB).", 400);
-      const key = process.env["LOVABLE_API_KEY"];
-      if (!key) throw new LLMError("AI is not configured for this app.", 500);
+      const key = process.env["GROQ_API_KEY"];
+      if (!key) throw new LLMError("Transcription is not configured (missing GROQ_API_KEY).", 500);
 
       const transcript = await transcribe(file, key);
       if (!transcript) throw new LLMError("No speech was detected in this recording.", 422);
